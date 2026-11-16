@@ -38,6 +38,43 @@ export const EXPIRY_PRESETS = [
 /** `null` = no member cap. */
 export const MEMBER_PRESETS = [2, 3, 4, 5, 10, null] as const;
 
+/** Profile tags. A user holds at most one value per kind. `role` values are fixed (ROLES). */
+export const TAG_KINDS = [
+  { id: 'unit',    label: 'Unit' },
+  { id: 'company', label: 'Company' },
+  { id: 'platoon', label: 'Platoon' },
+  { id: 'section', label: 'Section' },
+  { id: 'role',    label: 'Role' },
+] as const;
+
+export type TagKind = (typeof TAG_KINDS)[number]['id'];
+
+export const TAG_KIND_IDS = TAG_KINDS.map((k) => k.id) as TagKind[];
+
+export const ROLES = ['Commander', 'Trooper'] as const;
+
+export const TAG_MAX = 30;
+
+/** `key` is what matches; `label` is what people see (first spelling wins per kind+key). */
+export interface Tag {
+  kind: TagKind;
+  key: string;
+  label: string;
+}
+
+/** Case-, accent-, space- and punctuation-insensitive: "Alpha", "ALPHA " and "a-lpha" are one tag. */
+export function tagKey(label: string): string {
+  return label.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+export function validateTag(kind: TagKind, label: string): string | null {
+  const l = label.trim();
+  if (!tagKey(l)) return 'Use letters or numbers';
+  if (l.length > TAG_MAX) return `Tags must be ${TAG_MAX} characters or less`;
+  if (kind === 'role' && !ROLES.some((r) => tagKey(r) === tagKey(l))) return `Role must be one of: ${ROLES.join(', ')}`;
+  return null;
+}
+
 export type GroupStatus = 'open' | 'full' | 'expired' | 'cancelled';
 export type GroupVisibility = 'public' | 'private';
 
@@ -69,6 +106,8 @@ export interface GroupMember {
 
 export interface GroupDetail extends Group {
   members: GroupMember[];
+  /** Tags a viewer must ALL hold to see/join this group. Empty = open to everyone. */
+  audience: Omit<Tag, 'label'>[];
 }
 
 export interface UserProfile {
@@ -79,6 +118,8 @@ export interface UserProfile {
   notify: boolean;
   /** Categories to be told about (default all). */
   subscriptions: Category[];
+  /** The user's own tags, at most one per kind. */
+  tags: Tag[];
 }
 
 /** Derives display status. Only `cancelled` is stored; the rest is computed. */

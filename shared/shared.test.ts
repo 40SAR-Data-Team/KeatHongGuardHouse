@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { statusOf, validateDescription, validateTitle, EXPIRY_PRESETS, EXPIRY_MIN, EXPIRY_MAX, CATEGORIES } from './rules.ts';
+import { statusOf, tagKey, validateTag, validateDescription, validateTitle, EXPIRY_PRESETS, EXPIRY_MIN, EXPIRY_MAX, CATEGORIES } from './rules.ts';
 import { formatTimeLeft, splitLinks } from './format.ts';
 
 const now = Date.parse('2026-01-01T00:00:00Z');
@@ -38,4 +38,20 @@ test('formatters', () => {
     { text: 'https://b.co', href: 'https://b.co' },
   ]);
   expect(splitLinks('javascript:alert(1)')).toEqual([{ text: 'javascript:alert(1)' }]);
+});
+
+test('tagKey collapses case, spacing and punctuation', () => {
+  expect(tagKey('Alpha')).toBe(tagKey(' ALPHA '));
+  expect(tagKey('A-lpha!')).toBe(tagKey('alpha'));
+  expect(tagKey('2 SIB')).toBe(tagKey('2sib'));
+  expect(tagKey('Élan')).toBe('elan');
+  expect(tagKey('-- !')).toBe('');
+});
+
+test('validateTag', () => {
+  expect(validateTag('unit', '3 SIB')).toBeNull();
+  expect(validateTag('unit', '!!!')).not.toBeNull();
+  expect(validateTag('unit', 'x'.repeat(31))).not.toBeNull();
+  expect(validateTag('role', 'commander')).toBeNull();
+  expect(validateTag('role', 'general')).not.toBeNull();
 });

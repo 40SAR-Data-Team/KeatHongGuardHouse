@@ -46,6 +46,27 @@ export const groupMembers = pgTable('group_members', {
   index('group_members_user_id_idx').on(t.userId),
 ]);
 
+// One tag per (user, kind). There is no tags table: a tag exists while some user holds it.
+// `key` is the normalised match value (shared/rules.ts tagKey); `label` is for display.
+export const userTags = pgTable('user_tags', {
+  userId: bigint('user_id', { mode: 'number' }).notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  key: text('key').notNull(),
+  label: text('label').notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.userId, t.kind] }),
+  index('user_tags_kind_key_idx').on(t.kind, t.key),
+]);
+
+// Tags a viewer must ALL hold to see/join/get-DM'd about a group. No rows = everyone.
+export const groupAudience = pgTable('group_audience', {
+  groupId: integer('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  key: text('key').notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.groupId, t.kind] }),
+]);
+
 // Opt-outs, not opt-ins, so every category is on by default.
 export const mutedCategories = pgTable('muted_categories', {
   userId: bigint('user_id', { mode: 'number' }).notNull().references(() => users.telegramId, { onDelete: 'cascade' }),

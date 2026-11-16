@@ -2,15 +2,17 @@
  * @fileoverview SettingsPage — how-it-works, then the notification switch + categories.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { Spinner, Switch } from '@telegram-apps/telegram-ui';
 
-import { CATEGORIES, type Category, type UserProfile } from '../../shared/rules.ts';
+import {
+  CATEGORIES, ROLES, TAG_KINDS, TAG_MAX, tagKey, type Category, type TagKind, type UserProfile,
+} from '../../shared/rules.ts';
 import { getMe, updateMe } from '../lib/api.ts';
 import { useRun } from '../lib/useRun.ts';
 import {
-  cardStyle, chipStyle, headerStyle, pageStyle, sectionLabelStyle, subtitleStyle, theme, titleStyle,
+  buttonStyle, cardStyle, chipStyle, headerStyle, pageStyle, sectionLabelStyle, subtitleStyle, theme, titleStyle,
 } from '../lib/theme.ts';
 
 const STEPS = [
@@ -25,6 +27,46 @@ function Card({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+const tagInputStyle: CSSProperties = {
+  flex: 1, minWidth: 0, minHeight: 44, border: `2px solid ${theme.border}`, borderRadius: 14, padding: '8px 12px',
+  fontSize: 17, color: theme.textPrimary, background: theme.cardBg, boxSizing: 'border-box',
+};
+
+/** One value per kind. Empty text clears the tag; saving sends only what changed. */
+function TagsEditor({ profile, onSave, busy }: {
+  profile: UserProfile; onSave: (tags: Partial<Record<TagKind, string | null>>) => void; busy: boolean;
+}) {
+  const saved = Object.fromEntries(profile.tags.map((t) => [t.kind, t.label])) as Partial<Record<TagKind, string>>;
+  const [draft, setDraft] = useState<Partial<Record<TagKind, string>>>(saved);
+
+  const save = () => onSave(Object.fromEntries(TAG_KINDS.map(({ id }) => [id, draft[id]?.trim() || null])));
+
+  return (<>
+    {TAG_KINDS.filter((k) => k.id !== 'role').map(({ id, label }) => (
+      <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <span style={{ width: 80, fontSize: 17, color: theme.textPrimary }}>{label}</span>
+        <input
+          value={draft[id] ?? ''} maxLength={TAG_MAX} autoComplete="off" placeholder="Not set" aria-label={label}
+          onChange={(e) => setDraft({ ...draft, [id]: e.target.value })}
+          style={tagInputStyle}
+        />
+      </label>
+    ))}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+      <span style={{ width: 80, fontSize: 17, color: theme.textPrimary }}>Role</span>
+      {ROLES.map((r) => (
+        <button key={r} onClick={() => setDraft({ ...draft, role: tagKey(draft.role ?? '') === tagKey(r) ? '' : r })}
+          style={chipStyle(tagKey(draft.role ?? '') === tagKey(r))}>
+          {r}
+        </button>
+      ))}
+    </div>
+    <button onClick={save} disabled={busy} style={buttonStyle('primary', busy)}>
+      {busy ? <Spinner size="s" /> : 'Save tags'}
+    </button>
+  </>);
 }
 
 export function SettingsPage() {
@@ -66,6 +108,16 @@ export function SettingsPage() {
       </Card>
 
       {/* ── Controls ── */}
+      <div style={sectionLabelStyle}>My tags</div>
+      <Card>
+        {!data ? <Spinner size="s" /> : (<>
+          <p style={{ ...subtitleStyle, margin: '0 0 16px' }}>
+            Others can aim a group at tags like yours. Only people with every tag they pick will see it.
+          </p>
+          <TagsEditor key={JSON.stringify(data.tags)} profile={data} busy={busy === 'tags'} onSave={(tags) => void save('tags', { tags })} />
+        </>)}
+      </Card>
+
       <div style={sectionLabelStyle}>Notifications</div>
       <Card>
         {!data ? <Spinner size="s" /> : (<>

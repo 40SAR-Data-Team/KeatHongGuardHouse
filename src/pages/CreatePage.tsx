@@ -5,15 +5,16 @@
  */
 
 import { useState } from 'react';
+import useSWR from 'swr';
 import type { CSSProperties } from 'react';
 import { Spinner } from '@telegram-apps/telegram-ui';
 import { useSignal, initData } from '@tma.js/sdk-react';
 
 import {
   CATEGORIES, EXPIRY_PRESETS, MEMBER_PRESETS, TITLE_MAX, DESCRIPTION_MAX, validateDescription, validateTitle,
-  type Category, type GroupDetail,
+  TAG_KINDS, type Category, type GroupDetail, type TagKind, type UserProfile,
 } from '../../shared/rules.ts';
-import { createGroup } from '../lib/api.ts';
+import { createGroup, getMe } from '../lib/api.ts';
 import { useRun } from '../lib/useRun.ts';
 import { GroupDetailPanel } from '../components/GroupDetailPanel.tsx';
 import {
@@ -47,6 +48,8 @@ export function CreatePage() {
   const [description, setDescription] = useState('');
   const [maxMembers, setMaxMembers] = useState<number | null>(null);
   const [expiryMinutes, setExpiryMinutes] = useState<number>(CATEGORIES[0].defaultExpiry);
+  const [audienceKinds, setAudienceKinds] = useState<TagKind[]>([]);
+  const { data: me } = useSWR<UserProfile>('/api/users/me', getMe);
   const [errors, setErrors] = useState<{ title?: string | null; description?: string | null }>({});
   const [created, setCreated] = useState<GroupDetail | null>(null);
   const userId = useSignal(initData.user)?.id ?? 0;
@@ -63,7 +66,7 @@ export function CreatePage() {
     if (next.title || next.description) return;
     const group = await run(
       'create',
-      () => createGroup({ title: title.trim(), category, description: description.trim(), maxMembers, expiryMinutes }),
+      () => createGroup({ title: title.trim(), category, description: description.trim(), maxMembers, expiryMinutes, audienceKinds }),
       'create group',
     );
     if (group) setCreated(group);
@@ -73,6 +76,7 @@ export function CreatePage() {
     setCreated(null);
     setTitle('');
     setDescription('');
+    setAudienceKinds([]);
   }
 
   if (created) {
@@ -152,6 +156,25 @@ export function CreatePage() {
         aria-label="Notes"
       />
       {errors.description && <p style={errorStyle}>{errors.description}</p>}
+
+      <div style={labelStyle}>Send alert to</div>
+      <div style={rowStyle}>
+        <button onClick={() => setAudienceKinds([])} style={chipStyle(!audienceKinds.length)}>Everyone</button>
+        {me?.tags.map((t) => (
+          <button
+            key={t.kind}
+            onClick={() => setAudienceKinds(audienceKinds.includes(t.kind) ? audienceKinds.filter((k) => k !== t.kind) : [...audienceKinds, t.kind])}
+            style={chipStyle(audienceKinds.includes(t.kind))}
+          >
+            {TAG_KINDS.find((k) => k.id === t.kind)!.label}: {t.label}
+          </button>
+        ))}
+      </div>
+      <p style={{ ...subtitleStyle, margin: '8px 4px 0' }}>
+        {audienceKinds.length
+          ? 'Only people with ALL the tags you picked are alerted, and only they can find or join this group.'
+          : me && !me.tags.length ? 'Add your unit, platoon and so on in Settings to aim alerts at them.' : 'Everyone subscribed is alerted.'}
+      </p>
 
       <div style={bottomBarStyle}>
         <button onClick={() => void submit()} disabled={busy !== null} style={buttonStyle('primary', busy !== null)}>

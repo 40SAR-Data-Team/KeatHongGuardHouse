@@ -6,11 +6,13 @@
 
 import { sql as vercelSql } from '@vercel/postgres';
 import { drizzle } from 'drizzle-orm/vercel-postgres';
-import { and, eq, getTableColumns, gt, ne, notExists, sql } from 'drizzle-orm';
-import { groups, groupMembers, mutedCategories, users } from './_schema.js';
-import { CATEGORY_IDS, statusOf, type Category, type Group, type GroupDetail, type GroupVisibility } from '../shared/rules.js';
+import { and, eq, getTableColumns, gt, inArray, ne, notExists, or, sql } from 'drizzle-orm';
+import { groups, groupAudience, groupMembers, mutedCategories, userTags, users } from './_schema.js';
+import {
+  CATEGORY_IDS, statusOf, tagKey, type Category, type Group, type GroupDetail, type GroupVisibility, type Tag, type TagKind,
+} from '../shared/rules.js';
 
-export const db = drizzle(vercelSql, { schema: { groups, groupMembers, mutedCategories, users } });
+export const db = drizzle(vercelSql, { schema: { groups, groupAudience, groupMembers, mutedCategories, userTags, users } });
 
 type GroupRow = typeof groups.$inferSelect & {
   creatorFirstName: string;
@@ -27,6 +29,15 @@ function toGroup(row: GroupRow): Group {
   };
 }
 
+const isMember = (userId: number) =>
+  sql<boolean>`exists (select 1 from ${groupMembers} where ${groupMembers.groupId} = ${groups.id} and ${groupMembers.userId} = ${userId})`;
+
+/** True when `userId` holds every audience tag of the group (vacuously true with no audience). */
+const eligibleFor = (userId: number) => sql<boolean>`not exists (
+  select 1 from ${groupAudience} where ${groupAudience.groupId} = ${groups.id}
+    and not exists (select 1 from ${userTags} where ${userTags.userId} = ${userId}
+      and ${userTags.kind} = ${groupAudience.kind} and ${userTags.key} = ${groupAudience.key}))`;
+
 /** Group columns + creator name + whether `userId` is a member. */
 function groupSelect(userId: number) {
   return db
@@ -34,7 +45,7 @@ function groupSelect(userId: number) {
       ...getTableColumns(groups),
       creatorFirstName: users.firstName,
       creatorUsername: users.username,
-      joined: sql<boolean>`exists (select 1 from ${groupMembers} where ${groupMembers.groupId} = ${groups.id} and ${groupMembers.userId} = ${userId})`,
+      joined: isMember(userId),
     })
     .from(groups)
     .innerJoin(users, eq(users.telegramId, groups.creatorId));
@@ -42,10 +53,10 @@ function groupSelect(userId: number) {
 
 const notCancelled = eq(groups.cancelled, false);
 
-/** Public groups that have not expired or been cancelled, soonest expiry first. */
+/** Public groups the user may see (audience tags matched) that are still live, soonest expiry first. */
 export async function listPublicGroups(userId: number): Promise<Group[]> {
   const rows = await groupSelect(userId)
-    .where(and(notCancelled, eq(groups.visibility, 'public'), gt(groups.expiresAt, sql`now()`)))
+    .where(and(notCancelled, eq(groups.visibility, 'public'), gt(groups.expiresAt, sql`now()`), eligibleFor(userId)))
     .orderBy(groups.expiresAt);
   return rows.map(toGroup);
 }
@@ -60,7 +71,9 @@ export async function listMyGroups(userId: number): Promise<Group[]> {
 }
 
 export async function getGroup(code: string, userId: number): Promise<GroupDetail | null> {
-  const [row] = await groupSelect(userId).where(eq(groups.code, code.toUpperCase()));
+  // Members keep access; everyone else needs every audience tag (null = 404, same as a missing group).
+  const [row] = await groupSelect(userId)
+    .where(and(eq(groups.code, code.toUpperCase()), or(isMember(userId), eligibleFor(userId))));
   if (!row) return null;
   const members = await db
     .select({ userId: groupMembers.userId, firstName: users.firstName, username: users.username })
@@ -68,7 +81,11 @@ export async function getGroup(code: string, userId: number): Promise<GroupDetai
     .innerJoin(users, eq(users.telegramId, groupMembers.userId))
     .where(eq(groupMembers.groupId, row.id))
     .orderBy(groupMembers.joinedAt);
-  return { ...toGroup(row), members };
+  const audience = (await db
+    .select({ kind: groupAudience.kind, key: groupAudience.key })
+    .from(groupAudience)
+    .where(eq(groupAudience.groupId, row.id))) as GroupDetail['audience'];
+  return { ...toGroup(row), members, audience };
 }
 
 export async function isCodeTaken(code: string): Promise<boolean> {
@@ -83,6 +100,8 @@ export async function isCodeTaken(code: string): Promise<boolean> {
 export async function insertGroup(v: {
   code: string; creatorId: number; category: Category; title: string; description: string;
   maxMembers: number | null; expiryMinutes: number; visibility: GroupVisibility;
+  /** Kinds of the creator's own tags to use as the audience. Empty = everyone. */
+  audienceKinds: TagKind[];
 }): Promise<void> {
   const newGroup = db.$with('new_group').as(
     db.insert(groups).values({
@@ -96,7 +115,19 @@ export async function insertGroup(v: {
       db.select({ groupId: newGroup.id, userId: newGroup.creatorId, joinedAt: sql`now()`.as('joined_at') }).from(newGroup),
     ),
   );
-  await db.with(newGroup, firstMember).select().from(newGroup);
+  if (!v.audienceKinds.length) {
+    await db.with(newGroup, firstMember).select().from(newGroup);
+    return;
+  }
+  const audience = db.$with('audience').as(
+    db.insert(groupAudience).select(
+      db.select({ groupId: newGroup.id, kind: userTags.kind, key: userTags.key })
+        .from(newGroup)
+        .innerJoin(userTags, eq(userTags.userId, newGroup.creatorId))
+        .where(inArray(userTags.kind, v.audienceKinds)),
+    ),
+  );
+  await db.with(newGroup, firstMember, audience).select().from(newGroup);
 }
 
 /**
@@ -167,14 +198,41 @@ export async function setSubscriptions(userId: number, categories: Category[]): 
   }
 }
 
-/** Everyone with notifications on who hasn't muted this category. */
-export async function listSubscriberIds(category: Category, excludeId: number): Promise<number[]> {
+export async function getUserTags(userId: number): Promise<Tag[]> {
+  return (await db
+    .select({ kind: userTags.kind, key: userTags.key, label: userTags.label })
+    .from(userTags)
+    .where(eq(userTags.userId, userId))) as Tag[];
+}
+
+/**
+ * Sets (or clears, with null) the user's tag of one kind. The label is canonicalised:
+ * if anyone already holds this kind+key, their spelling is reused, so variants never fork a tag.
+ */
+export async function setUserTag(userId: number, kind: TagKind, label: string | null): Promise<void> {
+  if (label === null) {
+    await db.delete(userTags).where(and(eq(userTags.userId, userId), eq(userTags.kind, kind)));
+    return;
+  }
+  const key = tagKey(label);
+  const canon = sql`coalesce((select min(${userTags.label}) from ${userTags} where ${userTags.kind} = ${kind} and ${userTags.key} = ${key}), ${label.trim()})`;
+  await db
+    .insert(userTags)
+    .values({ userId, kind, key, label: canon })
+    .onConflictDoUpdate({ target: [userTags.userId, userTags.kind], set: { key, label: canon } });
+}
+
+/** Everyone with notifications on who hasn't muted this category and holds every audience tag. */
+export async function listSubscriberIds(category: Category, excludeId: number, audience: GroupDetail['audience']): Promise<number[]> {
   const rows = await db
     .select({ userId: users.telegramId })
     .from(users)
     .where(and(
       eq(users.notify, true),
       ne(users.telegramId, excludeId),
+      // One tag per (user, kind), so "matches all N audience tags" is a count of N.
+      audience.length ? sql`(select count(*) from ${userTags} where ${userTags.userId} = ${users.telegramId}
+        and (${userTags.kind}, ${userTags.key}) in (${sql.join(audience.map((t) => sql`(${t.kind}, ${t.key})`), sql`, `)})) = ${audience.length}` : undefined,
       notExists(db.select().from(mutedCategories).where(and(
         eq(mutedCategories.userId, users.telegramId), eq(mutedCategories.category, category),
       ))),

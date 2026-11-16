@@ -5,8 +5,8 @@
 
 import { ApiError } from './_response.js';
 import {
-  CATEGORY_IDS, EXPIRY_MAX, EXPIRY_MIN, MEMBERS_MAX, MEMBERS_MIN, validateDescription, validateTitle,
-  type Category, type GroupVisibility,
+  CATEGORY_IDS, EXPIRY_MAX, EXPIRY_MIN, MEMBERS_MAX, MEMBERS_MIN, TAG_KIND_IDS, validateDescription, validateTag, validateTitle,
+  type Category, type GroupVisibility, type TagKind,
 } from '../shared/rules.js';
 
 type Body = Record<string, unknown>;
@@ -35,6 +35,29 @@ export function parseCategory(value: unknown): Category {
   return value as Category;
 }
 
+/** Optional list of tag kinds (the creator's own tags of those kinds become the audience). */
+export function parseTagKinds(value: unknown): TagKind[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((k) => !TAG_KIND_IDS.includes(k as TagKind))) {
+    throw new ApiError(400, `audienceKinds must be an array of: ${TAG_KIND_IDS.join(', ')}`);
+  }
+  return [...new Set(value as TagKind[])];
+}
+
+/** `{ unit?: string | null, … }`: a string sets that kind's tag, null clears it. */
+export function parseTagPatch(value: unknown): Partial<Record<TagKind, string | null>> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'tags must be an object');
+  const out: Partial<Record<TagKind, string | null>> = {};
+  for (const [kind, label] of Object.entries(value)) {
+    if (!TAG_KIND_IDS.includes(kind as TagKind)) throw new ApiError(400, `Unknown tag kind: ${kind}`);
+    if (label === null) { out[kind as TagKind] = null; continue; }
+    const err = typeof label === 'string' ? validateTag(kind as TagKind, label) : 'Tag must be a string or null';
+    if (err) throw new ApiError(400, err);
+    out[kind as TagKind] = (label as string).trim();
+  }
+  return out;
+}
+
 export function parseCreateBody(body: Body) {
   const title = String(body.title ?? '').trim();
   const description = String(body.description ?? '').trim();
@@ -53,6 +76,7 @@ export function parseCreateBody(body: Body) {
     category: parseCategory(body.category),
     maxMembers: parseMaxMembers(body.maxMembers),
     visibility: parseVisibility(body.visibility),
+    audienceKinds: parseTagKinds(body.audienceKinds),
   };
 }
 

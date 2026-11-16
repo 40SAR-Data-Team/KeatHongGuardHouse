@@ -4,7 +4,7 @@
  */
 
 import { initData } from '@tma.js/sdk-react';
-import type { Category, Group, GroupDetail, GroupVisibility, UserProfile } from '../../shared/rules.ts';
+import type { Category, Group, GroupDetail, GroupVisibility, TagKind, UserProfile } from '../../shared/rules.ts';
 
 /**
  * Authenticated fetch to a same-origin API route.
@@ -41,6 +41,7 @@ export const createGroup = (payload: {
   description: string;
   maxMembers: number | null;
   expiryMinutes: number;
+  audienceKinds: TagKind[];
 }) => apiFetch<GroupDetail>('/api/groups', 'POST', payload);
 
 export type GroupAction = 'join' | 'leave' | 'cancel';
@@ -53,5 +54,5 @@ export const updateGroup = (code: string, patch: { maxMembers?: number | null; v
 
 export const getMe = () => apiFetch<UserProfile>('/api/users/me');
 
-export const updateMe = (patch: { notify?: boolean; subscriptions?: Category[] }) =>
+export const updateMe = (patch: { notify?: boolean; subscriptions?: Category[]; tags?: Partial<Record<TagKind, string | null>> }) =>
   apiFetch<UserProfile>('/api/users/me', 'PATCH', patch);
