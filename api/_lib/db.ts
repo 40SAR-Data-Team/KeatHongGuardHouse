@@ -241,3 +241,8 @@ export async function deleteOldGroups(): Promise<number> {
     .returning({ id: groups.id });
   return rows.length;
 }
+
+/** Throws if Postgres is unreachable. */
+export async function ping(): Promise<void> {
+  await db.execute(sql`select 1`);
+}

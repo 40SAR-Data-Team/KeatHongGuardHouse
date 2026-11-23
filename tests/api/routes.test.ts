@@ -232,3 +232,37 @@ describe('bot mute button', async () => {
     expect(c.answers).toEqual(['Unknown category']);
   });
 });
+
+describe('/api/health', async () => {
+  const health = (await import('../../api/health.ts')).default;
+  /** Stubs getWebhookInfo with `result`, runs the check, restores fetch. */
+  async function run(result: object, ok = true) {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => Response.json({ ok, result })) as unknown as typeof fetch;
+    const res = await call(health, { user: null });
+    globalThis.fetch = original;
+    return res;
+  }
+  const url = 'https://example.test/api/bot';
+
+  test('200 when env, DB and webhook are fine', async () => {
+    expect(await run({ url })).toMatchObject({ statusCode: 200, body: { ok: true, env: true, db: true, webhook: true } });
+  });
+  test('503 when the DB is down', async () => {
+    db.ping.mockImplementationOnce(async () => { throw new Error('down'); });
+    expect(await run({ url })).toMatchObject({ statusCode: 503, body: { db: false, webhook: true } });
+  });
+  test('503 on wrong webhook url, recent delivery error, or Telegram error', async () => {
+    expect((await run({ url: 'https://elsewhere/api/bot' })).statusCode).toBe(503);
+    expect((await run({ url, last_error_date: Math.floor(Date.now() / 1000) - 60 })).statusCode).toBe(503);
+    expect((await run({ url, last_error_date: Math.floor(Date.now() / 1000) - 3600 })).statusCode).toBe(200);
+    expect((await run({}, false)).statusCode).toBe(503);
+  });
+  test('503 when env is missing, without calling Telegram', async () => {
+    const secret = process.env.CRON_SECRET;
+    delete process.env.CRON_SECRET;
+    const res = await run({ url });
+    process.env.CRON_SECRET = secret;
+    expect(res).toMatchObject({ statusCode: 503, body: { env: false, webhook: false } });
+  });
+});

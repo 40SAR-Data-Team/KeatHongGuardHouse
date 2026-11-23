@@ -9,6 +9,7 @@ process.env.BOT_TOKEN = BOT_TOKEN;
 process.env.WEB_APP_URL = 'https://example.test';
 process.env.TELEGRAM_WEBHOOK_SECRET = 'webhook-secret';
 process.env.CRON_SECRET = 'cron-secret';
+process.env.POSTGRES_URL = 'postgres://test';
 
 /** Every db.ts export as a mock; tests set return values per case. */
 export const db = {
@@ -31,6 +32,7 @@ export const db = {
   countActiveGroups: mock(async () => 0),
   muteCategory: mock(async () => {}),
   deleteOldGroups: mock(async () => 0),
+  ping: mock(async () => {}),
 };
 void mock.module('../../api/_lib/db.ts', () => db);
 
