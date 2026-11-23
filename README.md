@@ -56,7 +56,3 @@ The app stores your Telegram id, first name, @username, the tags you set, your n
 **The Message button is missing.** That person has no Telegram @username. Ask them to set one in Telegram settings.
 
 **Can I leave a group I lead?** No. Cancel it instead, and members will be told.
-
----
-
-Developers: see [DeveloperGuide.md](DeveloperGuide.md). It covers how this works, how to extend it, and how to run it for your own community.
