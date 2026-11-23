@@ -1,15 +1,5 @@
-/**
- * @fileoverview One-time (idempotent) Telegram bot bootstrap. Points the webhook
- * at the deployed /api/bot route, registers the command list, sets the persistent
- * web_app menu button, and publishes the bot's name and description text.
- *
- * Run with `bun run telegram:setup`. Bun auto-loads .env.local, so no explicit
- * env loading is needed. Uses raw fetch rather than grammY — matching
- * api/_telegram.ts's style, and keeping this script free of the bot runtime.
- *
- * Re-run it after changing any copy in api/_botCopy.ts, after rotating
- * TELEGRAM_WEBHOOK_SECRET, or after the deployment URL changes.
- */
+/** Idempotent bot bootstrap: webhook, commands, menu button, name and descriptions. `bun run telegram:setup`.
+ *  Re-run after editing api/_lib/botCopy.ts, rotating TELEGRAM_WEBHOOK_SECRET or changing WEB_APP_URL. */
 
 import {
   BOT_COMMANDS,
@@ -17,7 +7,7 @@ import {
   OPEN_APP_BUTTON_TEXT,
   BOT_DESCRIPTION,
   BOT_SHORT_DESCRIPTION,
-} from '../api/_botCopy.ts';
+} from '../api/_lib/botCopy.ts';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 
@@ -25,19 +15,7 @@ const botToken = process.env.BOT_TOKEN;
 const webAppUrl = process.env.WEB_APP_URL;
 const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET;
 
-/**
- * Asserts a required environment variable is present, failing with a usable
- * message rather than sending a half-configured request to Telegram.
- *
- * Throws rather than calling process.exit so the narrowing holds without
- * relying on process.exit's `never` return type — scripts/ sits outside
- * tsconfig.json, so Node's types are not always in scope here. main()'s catch
- * prints the same message and exits 1.
- *
- * @param value - The environment variable's value.
- * @param name - The variable name, used in the error message.
- * @returns The value, narrowed to a string.
- */
+/** Returns the env value or throws a fix-it message. */
 function required(value: string | undefined, name: string): string {
   if (!value) {
     throw new Error(`${name} is unset. Add it to .env.local (see .env.example).`);
@@ -45,14 +23,7 @@ function required(value: string | undefined, name: string): string {
   return value;
 }
 
-/**
- * Calls one Bot API method, throwing on a non-ok response so a typo or a bad
- * payload fails loudly instead of leaving the bot half-configured.
- *
- * @param method - Bot API method name, e.g. 'setWebhook'.
- * @param payload - JSON body for the method.
- * @returns The method's `result` field.
- */
+/** Calls a Bot API method; throws on a non-ok reply so the bot is never left half-configured. */
 async function callApi(method: string, payload: unknown): Promise<unknown> {
   const res = await fetch(`${TELEGRAM_API_BASE}/bot${botToken}/${method}`, {
     method: 'POST',
@@ -70,20 +41,17 @@ async function main(): Promise<void> {
   const url = required(webAppUrl, 'WEB_APP_URL');
   const secret = required(secretToken, 'TELEGRAM_WEBHOOK_SECRET');
 
-  // Telegram rejects non-HTTPS URLs for both web_app buttons and setWebhook,
-  // and t.me links are not accepted in either — catch that here, not mid-run.
+  // web_app buttons and setWebhook both reject non-https and t.me URLs.
   if (!url.startsWith('https://')) {
     console.error(`✗ WEB_APP_URL must be an https:// URL, got: ${url}`);
     process.exit(1);
   }
 
-  // allowed_updates limits Telegram to plain messages: no edits, reactions or
-  // chat-member changes. Fewer function invocations, smaller attack surface.
-  // Widen it deliberately if callback queries are ever added.
+  // Only what api/bot.ts handles: commands and the Mute button. Fewer invocations, smaller attack surface.
   await callApi('setWebhook', {
     url: `${url}/api/bot`,
     secret_token: secret,
-    allowed_updates: ['message'],
+    allowed_updates: ['message', 'callback_query'],
     drop_pending_updates: true,
   });
 

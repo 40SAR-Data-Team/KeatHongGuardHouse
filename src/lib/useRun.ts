@@ -3,10 +3,7 @@ import { hapticFeedback } from '@tma.js/sdk-react';
 import { track } from '@vercel/analytics/react';
 import { useToast } from '../components/ToastProvider.tsx';
 
-/**
- * Wraps an async UI action with the shared haptic → track → toast-on-error
- * flow. `busy` holds the key of the action in flight, for spinners.
- */
+/** Runs a UI action with haptic, analytics and toast-on-error; `busy` is the in-flight key, for spinners. */
 export function useRun() {
   const { showError } = useToast();
   const [busy, setBusy] = useState<string | null>(null);

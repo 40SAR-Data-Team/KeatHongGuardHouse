@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Spinner } from '@telegram-apps/telegram-ui';
 import { hapticFeedback } from '@tma.js/sdk-react';
 import { track } from '@vercel/analytics/react';
-import { MEMBER_PRESETS, categoryOf, isActive, type GroupDetail } from '../../shared/rules.ts';
+import { BROADCAST_MAX, MEMBER_PRESETS, categoryOf, isActive, type GroupDetail } from '../../shared/rules.ts';
 import { formatExpiry, formatTimeLeft, memberName, splitLinks } from '../../shared/format.ts';
 import { groupAction, updateGroup, type GroupAction } from '../lib/api.ts';
 import { openUserChat, shareInvite } from '../lib/share.ts';
 import { useRun } from '../lib/useRun.ts';
-import { buttonStyle, cardStyle, chipStyle, sectionLabelStyle, statusBadge, theme } from '../lib/theme.ts';
+import { buttonStyle, cardStyle, inputStyle, chipStyle, sectionLabelStyle, statusBadge, theme } from '../lib/theme.ts';
 
 interface GroupDetailPanelProps {
   group: GroupDetail;
@@ -29,14 +29,13 @@ const ACTION_LABEL: Record<GroupAction, string> = { join: 'Join group', leave: '
 
 const rowStyle = { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px' } as const;
 
-/**
- * Group details, laid out One UI style: information on top (title, status, leader,
- * members), controls at the bottom (leader settings, then a sticky share/action bar).
- */
+/** Group details: info on top (title, leader, members), controls below (leader tools, sticky share/action bar). */
 export function GroupDetailPanel({ group: initial, currentUserId, onChanged, footerBottom = '0px' }: GroupDetailPanelProps) {
   const [group, setGroup] = useState(initial);
   const [confirming, setConfirming] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [kicking, setKicking] = useState<number | null>(null);
+  const [message, setMessage] = useState('');
   const { run, busy } = useRun();
 
   const isLeader = group.creatorId === currentUserId;
@@ -60,9 +59,24 @@ export function GroupDetailPanel({ group: initial, currentUserId, onChanged, foo
     void apply('action', () => groupAction(group.code, action), `${action} group`);
   }
 
-  function showFlash(message: string) {
-    setFlash(message);
+  function showFlash(text: string) {
+    setFlash(text);
     setTimeout(() => setFlash(null), 2000);
+  }
+
+  /** First tap arms, second tap removes. */
+  function kick(userId: number) {
+    if (kicking !== userId) return setKicking(userId);
+    setKicking(null);
+    void apply(`kick-${userId}`, () => groupAction(group.code, 'kick', { userId }), 'kick member');
+  }
+
+  async function sendBroadcast() {
+    const updated = await run('broadcast', () => groupAction(group.code, 'broadcast', { message: message.trim() }), 'broadcast');
+    if (updated) {
+      setMessage('');
+      showFlash('Sent to all members');
+    }
   }
 
   async function copyCode() {
@@ -166,6 +180,7 @@ export function GroupDetailPanel({ group: initial, currentUserId, onChanged, foo
         {group.members.map((m, i) => {
           const name = memberName(m.firstName, m.username);
           const canMessage = m.userId !== currentUserId && !!m.username;
+          const canKick = isLeader && active && m.userId !== group.creatorId;
           return (
             <div
               key={m.userId}
@@ -180,6 +195,16 @@ export function GroupDetailPanel({ group: initial, currentUserId, onChanged, foo
               <span style={{ width: 20, textAlign: 'center' }}>{m.userId === group.creatorId ? '👑' : '·'}</span>
               <span style={{ flex: 1, minWidth: 0 }}>{name}{m.userId === currentUserId && ' (you)'}</span>
               {canMessage && <span style={{ color: theme.accent, fontSize: 14 }}>Message ›</span>}
+              {canKick && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); kick(m.userId); }}
+                  disabled={busy !== null}
+                  aria-label={`Remove ${name}`}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: theme.error }}
+                >
+                  {busy === `kick-${m.userId}` ? <Spinner size="s" /> : kicking === m.userId ? 'Confirm' : 'Remove'}
+                </button>
+              )}
             </div>
           );
         })}
@@ -188,6 +213,28 @@ export function GroupDetailPanel({ group: initial, currentUserId, onChanged, foo
       {/* ── Controls ── */}
       {isLeader && active && (
         <div style={{ marginBottom: 24 }}>
+          {group.members.length > 1 && (
+            <>
+              <div style={sectionLabelStyle}>Message all members</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <input
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  maxLength={BROADCAST_MAX}
+                  placeholder="e.g. Meet at the guardhouse 1830"
+                  aria-label="Message to all members"
+                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                />
+                <button
+                  onClick={() => void sendBroadcast()}
+                  disabled={busy !== null || !message.trim()}
+                  style={{ ...buttonStyle('primary', busy !== null || !message.trim()), width: 'auto', padding: '0 16px' }}
+                >
+                  {busy === 'broadcast' ? <Spinner size="s" /> : 'Send'}
+                </button>
+              </div>
+            </>
+          )}
           <div style={sectionLabelStyle}>Member cap</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             {MEMBER_PRESETS.map((n) => (

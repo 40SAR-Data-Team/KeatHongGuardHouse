@@ -1,0 +1,4 @@
+[test]
+root = "tests"
+coverageThreshold = 0.8
+coveragePathIgnorePatterns = ["tests/**", "src/**", "api/_lib/db.ts", "api/_lib/schema.ts"]

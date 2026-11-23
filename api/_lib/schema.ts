@@ -1,7 +1,4 @@
-/**
- * @fileoverview Drizzle schema — single source of truth for the DB structure.
- * Apply changes with `bun run db:push`.
- */
+/** Drizzle schema, the source of truth for the DB. Apply with `bun run db:push`. */
 
 import { pgTable, pgEnum, text, varchar, boolean, timestamp, integer, bigint, primaryKey, index } from 'drizzle-orm/pg-core';
 
@@ -16,10 +13,7 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Status is derived (shared/rules.ts statusOf); only `cancelled` is stored.
-// `currentCount` is denormalised on purpose: the conditional
-// `UPDATE … WHERE current_count < max_members` in _db.ts joinGroup is what
-// makes joins race-free, which a COUNT(*) subquery cannot do.
+// Status is derived (statusOf). `currentCount` is denormalised so db.ts joinGroup's conditional UPDATE is race-free.
 export const groups = pgTable('groups', {
   id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
   code: text('code').notNull().unique(),
@@ -46,8 +40,7 @@ export const groupMembers = pgTable('group_members', {
   index('group_members_user_id_idx').on(t.userId),
 ]);
 
-// One tag per (user, kind). There is no tags table: a tag exists while some user holds it.
-// `key` is the normalised match value (shared/rules.ts tagKey); `label` is for display.
+// One tag per (user, kind); no tags table. `key` (tagKey) matches, `label` displays.
 export const userTags = pgTable('user_tags', {
   userId: bigint('user_id', { mode: 'number' }).notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
   kind: text('kind').notNull(),

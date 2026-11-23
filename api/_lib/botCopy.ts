@@ -1,13 +1,4 @@
-/**
- * @fileoverview Centralised user-facing copy for the Telegram bot. Shared by the
- * webhook route (api/bot.ts) and the one-time bootstrap script
- * (scripts/setup-telegram.ts) so the inline button label in the chat and the
- * label on the persistent menu button can never drift apart.
- *
- * Plain text only — no parse_mode anywhere, matching api/_telegram.ts. Keeping
- * every outbound message unformatted avoids the Markdown-escaping bug class
- * that the old (deleted) escapeMd helper existed to work around.
- */
+/** Bot copy shared by api/bot.ts and scripts/setup-telegram.ts. Plain text only: no parse_mode, no escaping bugs. */
 
 /** Bot display name. Telegram caps this at 64 chars; the @username is BotFather-only. */
 export const BOT_NAME = 'KeatHong GuardHouse';
@@ -25,11 +16,7 @@ const WELCOME_TEXT =
   '👇 Tap Open App below. It opens inside Telegram, nothing to install.\n\n' +
   'Lost it later? Tap Open App beside the message box anytime.';
 
-/**
- * Every command replies with `text` above a web_app button. `tab` lands the app on
- * that tab via `?tab=` (read once in src/components/App.tsx). Not a `#/path`:
- * Telegram appends launch data to the hash, which would clobber the route.
- */
+/** Each command replies with `text` + a web_app button; `tab` lands on that tab via `?tab=` (not `#/path`: Telegram owns the hash). */
 export const COMMAND_REPLIES = {
   start: { text: WELCOME_TEXT, button: OPEN_APP_BUTTON_TEXT, tab: '' },
   app: { text: '👇 Tap to see the groups open right now.', button: OPEN_APP_BUTTON_TEXT, tab: '' },

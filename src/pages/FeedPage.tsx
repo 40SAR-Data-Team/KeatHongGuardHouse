@@ -1,8 +1,4 @@
-/**
- * @fileoverview FeedPage — the main screen. Large title on top, group list in the
- * middle, All/Mine + category filters pinned at the bottom (One UI). Tapping a group
- * opens its details in a bottom sheet. Also opens `startapp` deep-link groups.
- */
+/** Main screen: search, group list, All/Mine + category filters at the bottom; details open in a sheet. Handles `startapp` deep links. */
 
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
@@ -16,8 +12,15 @@ import { useRun } from '../lib/useRun.ts';
 import { GroupCard } from '../components/GroupCard.tsx';
 import { GroupDetailPanel } from '../components/GroupDetailPanel.tsx';
 import {
-  bottomBarStyle, buttonStyle, chipStyle, gridStyle, headerStyle, pageStyle, subtitleStyle, theme, titleStyle,
+  bottomBarStyle, buttonStyle, inputStyle, chipStyle, gridStyle, headerStyle, pageStyle, subtitleStyle, theme, titleStyle,
 } from '../lib/theme.ts';
+
+/** Search hits title, leader name or @username, or the code. */
+function matches(g: Group, q: string): boolean {
+  return [g.title, g.creatorFirstName, g.creatorUsername ?? '', g.code].some((s) => s.toLowerCase().includes(q));
+}
+
+const CODE_RE = /^[A-Z]+\d{3}$/;
 
 // Module-level so the deep link opens once per launch, not on every tab switch back.
 let deepLinkHandled = false;
@@ -29,6 +32,7 @@ export function FeedPage() {
   const startParam = useLaunchParams().tgWebAppStartParam ?? '';
   const [mine, setMine] = useState(false);
   const [category, setCategory] = useState<Category | null>(null);
+  const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<GroupDetail | null>(null);
   const { data: groups, error, mutate } = useSWR<Group[], Error>(['groups', mine], () => getGroups(mine), {
     refreshInterval: 30_000,
@@ -57,7 +61,11 @@ export function FeedPage() {
     if (startParam !== 'debug' && /^[A-Za-z]+\d*$/.test(startParam)) void open(startParam.toUpperCase());
   }, []);
 
-  const shown = groups?.filter((g) => !category || g.category === category) ?? [];
+  const q = query.trim().toLowerCase();
+  const shown = groups?.filter((g) => (!category || g.category === category) && (!q || matches(g, q))) ?? [];
+  // A typed code that isn't listed may still be a private ("link only") group: offer to open it directly.
+  const code = query.trim().toUpperCase();
+  const lookup = CODE_RE.test(code) && !groups?.some((g) => g.code === code) ? code : null;
   const openCount = shown.filter((g) => g.status === 'open').length;
 
   return (
@@ -68,6 +76,19 @@ export function FeedPage() {
         <p style={subtitleStyle}>
           {!groups ? 'Loading…' : openCount ? `${openCount} open now` : 'Nothing open right now'}
         </p>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name, leader or code"
+          aria-label="Search groups"
+          style={{ ...inputStyle, width: '100%', marginTop: 16 }}
+        />
+        {lookup && (
+          <button onClick={() => void open(lookup)} style={{ ...buttonStyle('outline'), marginTop: 8 }}>
+            {busy === `open-${lookup}` ? <Spinner size="s" /> : `Open group ${lookup}`}
+          </button>
+        )}
       </header>
 
       {!groups && !error && (
@@ -81,7 +102,7 @@ export function FeedPage() {
       {groups && shown.length === 0 && (
         <div style={{ textAlign: 'center', paddingTop: 32 }}>
           <div style={{ fontSize: 21, fontWeight: 600, color: theme.textPrimary, marginBottom: 8 }}>
-            {mine ? "You're not in any groups yet" : 'No open groups here'}
+            {q ? 'No groups match your search' : mine ? "You're not in any groups yet" : 'No open groups here'}
           </div>
           <div style={{ fontSize: 17, color: theme.textSecondary, marginBottom: 20 }}>
             Start one — it takes 10 seconds.

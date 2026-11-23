@@ -1,6 +1,4 @@
-/**
- * @fileoverview SettingsPage — how-it-works, then the notification switch + categories.
- */
+/** How it works, profile tags, and notification switch + categories. */
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import useSWR from 'swr';

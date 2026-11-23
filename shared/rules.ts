@@ -1,15 +1,17 @@
-/**
- * @fileoverview Group rules and shared types, imported by both api/ and src/.
- * Must stay pure TS: no DOM, no import.meta.env, no drizzle runtime.
- */
+/** Limits, categories, tags and API types shared by api/ and src/. Pure TS only: no DOM, env or drizzle. */
 
 export const TITLE_MAX = 60;
-/** Matches the varchar(500) column in api/_schema.ts. */
+/** Matches the varchar(500) column in api/_lib/schema.ts. */
 export const DESCRIPTION_MAX = 500;
 export const EXPIRY_MIN = 15;
 export const EXPIRY_MAX = 24 * 60;
 export const MEMBERS_MIN = 2;
 export const MEMBERS_MAX = 50;
+/** Active groups one person may lead at once; every public group DMs the camp, so this caps spam. */
+export const MAX_ACTIVE_GROUPS = 3;
+export const BROADCAST_MAX = 500;
+/** Groups expired longer than this are deleted by api/cron.ts. */
+export const RETENTION_DAYS = 30;
 
 export const CATEGORIES = [
   { id: 'food',   label: 'Food',   emoji: '🍱', defaultExpiry: 60 },
@@ -20,7 +22,7 @@ export const CATEGORIES = [
 
 export type Category = (typeof CATEGORIES)[number]['id'];
 
-export const CATEGORY_IDS = CATEGORIES.map((c) => c.id) as Category[];
+export const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
 
 export function categoryOf(id: string) {
   return CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1];
@@ -49,7 +51,7 @@ export const TAG_KINDS = [
 
 export type TagKind = (typeof TAG_KINDS)[number]['id'];
 
-export const TAG_KIND_IDS = TAG_KINDS.map((k) => k.id) as TagKind[];
+export const TAG_KIND_IDS = TAG_KINDS.map((k) => k.id);
 
 export const ROLES = ['Commander', 'Trooper'] as const;
 
@@ -98,7 +100,7 @@ export interface Group {
   joined: boolean;
 }
 
-export interface GroupMember {
+interface GroupMember {
   userId: number;
   firstName: string;
   username: string | null;

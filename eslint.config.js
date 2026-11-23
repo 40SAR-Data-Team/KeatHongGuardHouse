@@ -7,8 +7,9 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
+  { ignores: ['dist', 'coverage', 'tests', '*.config.*'] },
   {
-    files: ['src/**/*.{js,jsx,mjs,cjs,ts,tsx}'],
+    files: ['{src,api,shared,scripts}/**/*.{ts,tsx}'],
     extends: [
       eslint.configs.recommended,
       ...tseslint.configs.recommendedTypeChecked,
@@ -29,6 +30,7 @@ export default tseslint.config(
       },
       globals: {
         ...globals.browser,
+        ...globals.node,
       },
     },
     rules: {

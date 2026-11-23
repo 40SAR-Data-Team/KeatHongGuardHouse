@@ -1,9 +1,4 @@
-/**
- * @fileoverview Telegram MiniApp SDK initialisation.
- * Configures debug mode, optionally loads Eruda, applies macOS-specific event
- * workarounds, and mounts all SDK components (backButton, initData, themeParams,
- * miniApp, viewport).
- */
+/** Telegram SDK init: debug/Eruda, macOS workarounds, mounts backButton, initData, themeParams, miniApp, viewport. */
 
 import {
   setDebug,
@@ -19,9 +14,6 @@ import {
   backButton,
 } from '@tma.js/sdk-react';
 
-/**
- * Initializes the application and configures its dependencies.
- */
 export function init(options: {
   debug: boolean;
   eruda: boolean;
@@ -37,9 +29,7 @@ export function init(options: {
     eruda.position({ x: window.innerWidth - 50, y: 0 });
   });
 
-  // Telegram for macOS has a ton of bugs, including cases, when the client doesn't
-  // even response to the "web_app_request_theme" method. It also generates an incorrect
-  // event for the "web_app_request_safe_area" method.
+  // Telegram macOS may ignore web_app_request_theme and sends a bad safe_area event; patch both.
   if (options.mockForMacOS) {
     let firstThemeSent = false;
     mockTelegramEnv({

@@ -1,6 +1,4 @@
-/**
- * @fileoverview Top-level error boundary: shows the error message instead of a blank screen.
- */
+/** Shows the error message instead of a blank screen. */
 
 import { Component, type PropsWithChildren } from 'react';
 

@@ -1,12 +1,9 @@
-/**
- * @fileoverview GET   /api/users/me — profile + notification categories.
- *               PATCH /api/users/me — { notify?: boolean, subscriptions?: Category[], tags?: { [kind]: string | null } }.
- */
+/** GET /api/users/me: profile. PATCH { notify?, subscriptions?: Category[], tags?: { [kind]: string | null } }. */
 
-import { getNotifySettings, getUserTags, setNotify, setSubscriptions, setUserTag } from '../../_db.js';
-import { parseCategories, parseTagPatch } from '../../_validation.js';
-import { ApiError, withAuth, ok } from '../../_response.js';
-import type { TelegramUser } from '../../_auth.js';
+import { getNotifySettings, getUserTags, setNotify, setSubscriptions, setUserTag } from '../../_lib/db.js';
+import { parseCategories, parseTagPatch } from '../../_lib/validation.js';
+import { ApiError, bodyOf, withAuth, ok } from '../../_lib/response.js';
+import type { TelegramUser } from '../../_lib/auth.js';
 import type { TagKind, UserProfile } from '../../../shared/rules.js';
 
 async function profile(user: TelegramUser): Promise<UserProfile> {
@@ -23,7 +20,7 @@ export default withAuth({
   GET: async (_req, res, user) => ok(res, await profile(user)),
 
   PATCH: async (req, res, user) => {
-    const body = req.body as Record<string, unknown>;
+    const body = bodyOf(req);
     if (body.notify !== undefined) {
       if (typeof body.notify !== 'boolean') throw new ApiError(400, 'notify must be a boolean');
       await setNotify(user.id, body.notify);

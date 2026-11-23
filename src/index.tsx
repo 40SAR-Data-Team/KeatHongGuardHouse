@@ -1,9 +1,4 @@
-/**
- * @fileoverview Application entry point.
- * Imports Telegram UI styles, mocks the Telegram environment in development,
- * initialises the SDK via init(), then renders Root inside StrictMode.
- * Falls back to EnvUnsupported if the environment is incompatible.
- */
+/** Entry: Telegram UI styles, dev mock, SDK init, then render (EnvUnsupported if the client can't run us). */
 
 // Include Telegram UI styles first to allow our code override the package CSS.
 import '@telegram-apps/telegram-ui/dist/styles.css';
@@ -12,15 +7,15 @@ import ReactDOM from 'react-dom/client';
 import { StrictMode } from 'react';
 import { retrieveLaunchParams } from '@tma.js/sdk-react';
 
-import { App } from '@/components/App.tsx';
-import { ErrorBoundary } from '@/components/ErrorBoundary.tsx';
-import { EnvUnsupported } from '@/components/EnvUnsupported.tsx';
-import { init } from '@/init.ts';
+import { App } from '@/app/App.tsx';
+import { ErrorBoundary } from '@/app/ErrorBoundary.tsx';
+import { EnvUnsupported } from '@/app/EnvUnsupported.tsx';
+import { init } from '@/app/init.ts';
 
 import './index.css';
 
 // Mock the environment in case, we are outside Telegram.
-import './mockEnv.ts';
+import './app/mockEnv.ts';
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 

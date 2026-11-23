@@ -1,7 +1,4 @@
-/**
- * @fileoverview Group code generation utilities.
- * Produces short memorable 4–6 letter codes from a curated word list.
- */
+/** Group codes: a memorable word + 3 digits, e.g. MANGO427. */
 
 const WORD_LIST: readonly string[] = [
   'APPLE','MANGO','GRAPE','LEMON','LIME','PEACH','PLUM','PEAR',
@@ -25,27 +22,13 @@ const WORD_LIST: readonly string[] = [
   'STONE','FLINT','SHALE','ALPHA','BRAVO','ECHO',
 ];
 
-/**
- * Picks a random word plus 3 digits, e.g. `MANGO427`. Codes are unique across
- * every group ever created, so a bare word would run out after ~150 groups.
- *
- * ponytail: ~150k codes total; reuse codes of long-expired groups if that ever runs low.
- *
- * @returns An uppercase group code.
- */
-export function generateCode(): string {
-  const word = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)]!;
+// ponytail: ~150k codes total; reuse codes of long-expired groups if that ever runs low.
+function generateCode(): string {
+  const word = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
   return word + String(Math.floor(Math.random() * 1000)).padStart(3, '0');
 }
 
-/**
- * Generates a unique group code by retrying until no collision is found.
- *
- * @param isCodeTaken - Async predicate that returns true if the code already exists.
- * @param maxRetries - Maximum number of attempts before giving up (default 10).
- * @returns A unique group code string.
- * @throws {Error} If a unique code cannot be generated within `maxRetries` attempts.
- */
+/** Retries random codes until `isCodeTaken` says no; throws after `maxRetries`. */
 export async function generateUniqueCode(
   isCodeTaken: (code: string) => Promise<boolean>,
   maxRetries = 10,

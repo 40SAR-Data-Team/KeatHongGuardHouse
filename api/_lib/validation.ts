@@ -1,15 +1,15 @@
-/**
- * @fileoverview Request-body validators. Limits come from shared/rules.ts so
- * the client form and the server can't disagree.
- */
+/** Request-body parsers; throw ApiError(400). Limits come from shared/rules.ts so client and server agree. */
 
-import { ApiError } from './_response.js';
+import { ApiError } from './response.js';
 import {
-  CATEGORY_IDS, EXPIRY_MAX, EXPIRY_MIN, MEMBERS_MAX, MEMBERS_MIN, TAG_KIND_IDS, validateDescription, validateTag, validateTitle,
+  BROADCAST_MAX, CATEGORY_IDS, EXPIRY_MAX, EXPIRY_MIN, MEMBERS_MAX, MEMBERS_MIN, TAG_KIND_IDS, validateDescription, validateTag, validateTitle,
   type Category, type GroupVisibility, type TagKind,
-} from '../shared/rules.js';
+} from '../../shared/rules.js';
 
 type Body = Record<string, unknown>;
+
+/** The value if it's a string, else '' (never "[object Object]"). */
+export const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** null (no limit) or an integer within MEMBERS_MIN..MEMBERS_MAX. */
 export function parseMaxMembers(value: unknown): number | null {
@@ -23,12 +23,12 @@ export function parseMaxMembers(value: unknown): number | null {
 
 /** Defaults to 'public' when absent. */
 export function parseVisibility(value: unknown): GroupVisibility {
-  const v = value === undefined ? 'public' : String(value);
+  const v = value === undefined ? 'public' : value;
   if (v !== 'public' && v !== 'private') throw new ApiError(400, "visibility must be 'public' or 'private'");
   return v;
 }
 
-export function parseCategory(value: unknown): Category {
+function parseCategory(value: unknown): Category {
   if (!CATEGORY_IDS.includes(value as Category)) {
     throw new ApiError(400, `category must be one of: ${CATEGORY_IDS.join(', ')}`);
   }
@@ -36,7 +36,7 @@ export function parseCategory(value: unknown): Category {
 }
 
 /** Optional list of tag kinds (the creator's own tags of those kinds become the audience). */
-export function parseTagKinds(value: unknown): TagKind[] {
+function parseTagKinds(value: unknown): TagKind[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.some((k) => !TAG_KIND_IDS.includes(k as TagKind))) {
     throw new ApiError(400, `audienceKinds must be an array of: ${TAG_KIND_IDS.join(', ')}`);
@@ -59,8 +59,8 @@ export function parseTagPatch(value: unknown): Partial<Record<TagKind, string | 
 }
 
 export function parseCreateBody(body: Body) {
-  const title = String(body.title ?? '').trim();
-  const description = String(body.description ?? '').trim();
+  const title = str(body.title).trim();
+  const description = str(body.description).trim();
   const err = validateTitle(title) ?? validateDescription(description);
   if (err) throw new ApiError(400, err);
 
@@ -83,4 +83,18 @@ export function parseCreateBody(body: Body) {
 export function parseCategories(value: unknown): Category[] {
   if (!Array.isArray(value)) throw new ApiError(400, 'subscriptions must be an array');
   return [...new Set(value.map(parseCategory))];
+}
+
+/** Leader broadcast text, 1..BROADCAST_MAX chars after trim. */
+export function parseBroadcast(value: unknown): string {
+  const m = typeof value === 'string' ? value.trim() : '';
+  if (!m || m.length > BROADCAST_MAX) throw new ApiError(400, `message must be 1-${BROADCAST_MAX} characters`);
+  return m;
+}
+
+/** A Telegram user id (positive integer). */
+export function parseUserId(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isSafeInteger(n) || n <= 0) throw new ApiError(400, 'userId must be a positive integer');
+  return n;
 }

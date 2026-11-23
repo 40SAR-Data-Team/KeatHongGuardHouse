@@ -1,6 +1,4 @@
-/**
- * @fileoverview Invite link sharing and Telegram DM helpers.
- */
+/** Invite sharing and open-a-chat helpers. */
 
 import { shareURL, openTelegramLink } from '@tma.js/sdk-react';
 import { inviteLink } from '../../shared/format.ts';
@@ -8,13 +6,7 @@ import { inviteLink } from '../../shared/format.ts';
 /** Configurable via `VITE_INVITE_LINK_BASE` (see `.env.example`). */
 const INVITE_LINK_BASE = import.meta.env.VITE_INVITE_LINK_BASE || 'https://t.me/keat_hong_guard_house_bot/app';
 
-/**
- * Copies a group's invite link to the clipboard, then opens Telegram's share
- * sheet. Either one succeeding is enough.
- *
- * @returns Whether the link was copied.
- * @throws If the link could neither be copied nor shared.
- */
+/** Copies the invite link then opens Telegram's share sheet. True if copied; throws if both fail. */
 export async function shareInvite(code: string, title: string): Promise<boolean> {
   const link = inviteLink(INVITE_LINK_BASE, code);
   const text = `Join "${title}" on KeatHong GuardHouse`;

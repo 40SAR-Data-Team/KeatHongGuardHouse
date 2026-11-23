@@ -1,16 +1,9 @@
-/**
- * @fileoverview API client for the KeatHong MiniApp Vercel Functions.
- * Injects the Telegram initData as the `x-init-data` header on every request.
- */
+/** Typed client for /api; sends Telegram initData as `x-init-data`. */
 
 import { initData } from '@tma.js/sdk-react';
 import type { Category, Group, GroupDetail, GroupVisibility, TagKind, UserProfile } from '../../shared/rules.ts';
 
-/**
- * Authenticated fetch to a same-origin API route.
- *
- * @throws {Error} With the server's error message if the response is not OK.
- */
+/** Same-origin authed fetch; throws the server's error message on non-2xx. */
 async function apiFetch<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const raw = initData.raw();
   if (!raw) throw new Error('Telegram initData not available');
@@ -46,8 +39,9 @@ export const createGroup = (payload: {
 
 export type GroupAction = 'join' | 'leave' | 'cancel';
 
-export const groupAction = (code: string, action: GroupAction) =>
-  apiFetch<GroupDetail>(`/api/groups/${code}`, 'POST', { action });
+/** `extra`: `{ userId }` for kick, `{ message }` for broadcast. */
+export const groupAction = (code: string, action: GroupAction | 'kick' | 'broadcast', extra?: object) =>
+  apiFetch<GroupDetail>(`/api/groups/${code}`, 'POST', { action, ...extra });
 
 export const updateGroup = (code: string, patch: { maxMembers?: number | null; visibility?: GroupVisibility }) =>
   apiFetch<GroupDetail>(`/api/groups/${code}`, 'PATCH', patch);

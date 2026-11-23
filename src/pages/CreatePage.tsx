@@ -1,8 +1,4 @@
-/**
- * @fileoverview CreatePage — one-screen group creation. Picking a category
- * sets a sensible expiry; after creating, shows the group's detail panel
- * (which has the share buttons).
- */
+/** One-screen create: category sets a default expiry; shows the detail panel (with Share) after. */
 
 import { useState } from 'react';
 import useSWR from 'swr';

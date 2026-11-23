@@ -1,6 +1,4 @@
-/**
- * @fileoverview Display formatters, imported by both api/ (bot DMs) and src/.
- */
+/** Display formatters shared by api/ (bot DMs) and src/. Times are Singapore time. */
 
 const timeFormat = new Intl.DateTimeFormat('en-SG', {
   hour: 'numeric',
@@ -32,10 +30,7 @@ export function inviteLink(base: string, code: string): string {
   return `${base}?startapp=${code}`;
 }
 
-/**
- * Splits free text into plain and http(s) URL parts so the UI can render links
- * without innerHTML. Only http(s) is ever linked, so no javascript: hrefs.
- */
+/** Splits text into plain and http(s) URL parts so the UI links without innerHTML (never javascript: hrefs). */
 export function splitLinks(text: string): { text: string; href?: string }[] {
   return text.split(/(https?:\/\/[^\s<>"]+)/).filter(Boolean).map((part) =>
     /^https?:\/\//.test(part) ? { text: part, href: part } : { text: part });

@@ -51,6 +51,11 @@ export const gridStyle: CSSProperties = {
   display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: 12,
 };
 
+export const inputStyle: CSSProperties = {
+  boxSizing: 'border-box', padding: '10px 14px', fontSize: 16, borderRadius: 12,
+  border: `1px solid ${theme.border}`, background: theme.cardBg, color: theme.textPrimary,
+};
+
 export const cardStyle: CSSProperties = {
   background: theme.cardBg, borderRadius: 20, border: `2px solid ${theme.border}`, boxShadow: `0 4px 0 ${theme.border}`,
 };

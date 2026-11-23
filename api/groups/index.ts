@@ -1,14 +1,14 @@
-/**
- * @fileoverview GET /api/groups — public active groups (`?mine=1`: the caller's groups).
- *               POST /api/groups — create a group; DMs subscribers of its category who match its audience tags.
- */
+/** GET /api/groups: visible live groups (`?mine=1`: the caller's). POST: create a group and DM matching subscribers. */
 
-import { getGroup, getUserTags, insertGroup, isCodeTaken, listMyGroups, listPublicGroups, listSubscriberIds } from '../_db.js';
-import { generateUniqueCode } from '../_codegen.js';
-import { parseCreateBody } from '../_validation.js';
-import { withAuth, ok, ApiError } from '../_response.js';
 import { waitUntil } from '@vercel/functions';
-import { notifyNewGroup } from '../_telegram.js';
+import {
+  countActiveGroups, getGroup, getUserTags, insertGroup, isCodeTaken, listMyGroups, listPublicGroups, listSubscriberIds,
+} from '../_lib/db.js';
+import { generateUniqueCode } from '../_lib/codegen.js';
+import { parseCreateBody } from '../_lib/validation.js';
+import { withAuth, ok, ApiError, bodyOf } from '../_lib/response.js';
+import { notifyNewGroup } from '../_lib/telegram.js';
+import { MAX_ACTIVE_GROUPS } from '../../shared/rules.js';
 
 export default withAuth({
   GET: async (req, res, user) => {
@@ -16,16 +16,21 @@ export default withAuth({
   },
 
   POST: async (req, res, user) => {
-    const body = parseCreateBody(req.body as Record<string, unknown>);
+    const body = parseCreateBody(bodyOf(req));
+    // ponytail: two concurrent creates can exceed the cap by one; move to a DB check if abused.
+    if (await countActiveGroups(user.id) >= MAX_ACTIVE_GROUPS) {
+      throw new ApiError(429, `You already lead ${MAX_ACTIVE_GROUPS} active groups. Cancel one or wait for it to close.`);
+    }
     const have = new Set((await getUserTags(user.id)).map((t) => t.kind));
     const missing = body.audienceKinds.find((k) => !have.has(k));
     if (missing) throw new ApiError(400, `Set your ${missing} tag in Settings before targeting it`);
+
     const code = await generateUniqueCode(isCodeTaken);
     await insertGroup({ ...body, code, creatorId: user.id });
     const group = (await getGroup(code, user.id))!;
 
     if (group.visibility === 'public') {
-      // Background: respond now, keep the function alive until every DM is sent.
+      // Respond now; waitUntil keeps the function alive until every DM is sent.
       waitUntil(listSubscriberIds(group.category, user.id, group.audience)
         .then((ids) => notifyNewGroup(ids, group))
         .catch((e) => console.warn('[telegram] new-group DMs failed', e)));

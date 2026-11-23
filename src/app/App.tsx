@@ -1,6 +1,4 @@
-/**
- * @fileoverview App — root router, always light, with a playful bottom tab bar.
- */
+/** Root: light-only AppRoot, HashRouter and the bottom tab bar. */
 
 import { useEffect } from 'react';
 import { Navigate, Route, Routes, HashRouter, useLocation, useNavigate } from 'react-router-dom';
@@ -11,7 +9,7 @@ import { Analytics } from '@vercel/analytics/react';
 import { FeedPage } from '@/pages/FeedPage.tsx';
 import { CreatePage } from '@/pages/CreatePage.tsx';
 import { SettingsPage } from '@/pages/SettingsPage.tsx';
-import { ToastProvider } from './ToastProvider.tsx';
+import { ToastProvider } from '@/components/ToastProvider.tsx';
 import { bottomBarStyle, theme } from '@/lib/theme.ts';
 
 /** Tab routes, in tab bar order. */
@@ -21,7 +19,7 @@ const routes = [
   { path: '/settings', Component: SettingsPage, tabLabel: 'Settings', tabIcon: '⚙️' },
 ];
 
-/** `?tab=` from a bot command button (api/_botCopy.ts); consumed once so tab switches aren't hijacked. */
+/** `?tab=` from a bot command button (api/_lib/botCopy.ts); consumed once so tab switches aren't hijacked. */
 let pendingTab: string | null = new URLSearchParams(window.location.search).get('tab');
 
 function AppTabbar() {
@@ -73,10 +71,6 @@ function AppTabbar() {
   );
 }
 
-/**
- * Root application component: AppRoot pinned to light (ignores Telegram's dark theme),
- * then a HashRouter with tab-based navigation.
- */
 export function App() {
   const lp = useLaunchParams();
 

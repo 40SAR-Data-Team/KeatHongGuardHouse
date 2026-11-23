@@ -1,18 +1,14 @@
-/**
- * @fileoverview Drizzle DB client and all group/user queries.
- * Reads POSTGRES_URL from the environment (auto-wired by Vercel).
- * Schema is managed via `bun run db:push` (see drizzle.config.ts), not at runtime.
- */
+/** Drizzle client and every query. Reads POSTGRES_URL; schema is applied with `bun run db:push`. */
 
 import { sql as vercelSql } from '@vercel/postgres';
 import { drizzle } from 'drizzle-orm/vercel-postgres';
-import { and, eq, getTableColumns, gt, inArray, ne, notExists, or, sql } from 'drizzle-orm';
-import { groups, groupAudience, groupMembers, mutedCategories, userTags, users } from './_schema.js';
+import { and, count, eq, getTableColumns, gt, inArray, lt, ne, notExists, or, sql } from 'drizzle-orm';
+import { groups, groupAudience, groupMembers, mutedCategories, userTags, users } from './schema.js';
 import {
-  CATEGORY_IDS, statusOf, tagKey, type Category, type Group, type GroupDetail, type GroupVisibility, type Tag, type TagKind,
-} from '../shared/rules.js';
+  CATEGORY_IDS, RETENTION_DAYS, statusOf, tagKey, type Category, type Group, type GroupDetail, type GroupVisibility, type Tag, type TagKind,
+} from '../../shared/rules.js';
 
-export const db = drizzle(vercelSql, { schema: { groups, groupAudience, groupMembers, mutedCategories, userTags, users } });
+const db = drizzle(vercelSql, { schema: { groups, groupAudience, groupMembers, mutedCategories, userTags, users } });
 
 type GroupRow = typeof groups.$inferSelect & {
   creatorFirstName: string;
@@ -93,14 +89,10 @@ export async function isCodeTaken(code: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-/**
- * Inserts a group and its creator as first member in one statement (writable
- * CTEs) — the Neon HTTP driver has no interactive transactions.
- */
+/** Inserts the group, creator membership and audience in one statement (writable CTEs: no interactive transactions on Neon HTTP). */
 export async function insertGroup(v: {
   code: string; creatorId: number; category: Category; title: string; description: string;
   maxMembers: number | null; expiryMinutes: number; visibility: GroupVisibility;
-  /** Kinds of the creator's own tags to use as the audience. Empty = everyone. */
   audienceKinds: TagKind[];
 }): Promise<void> {
   const newGroup = db.$with('new_group').as(
@@ -130,13 +122,7 @@ export async function insertGroup(v: {
   await db.with(newGroup, firstMember, audience).select().from(newGroup);
 }
 
-/**
- * Atomically joins: the UPDATE row-locks the group and re-checks the cap on the
- * latest row version, so concurrent joins can't overfill. A duplicate member
- * fails the PK and rolls the whole statement back.
- *
- * @returns The new member count, or null if the group isn't joinable.
- */
+/** Atomic join: the UPDATE row-locks and re-checks the cap, so concurrent joins can't overfill. New count, or null if not joinable. */
 export async function joinGroup(groupId: number, userId: number): Promise<number | null> {
   const result = await db.execute<{ current_count: number }>(sql`
     with g as (
@@ -151,7 +137,7 @@ export async function joinGroup(groupId: number, userId: number): Promise<number
   return result.rows[0]?.current_count ?? null;
 }
 
-/** @returns The new member count, or null if the user wasn't a member. */
+/** New member count, or null if the user wasn't a member. */
 export async function leaveGroup(groupId: number, userId: number): Promise<number | null> {
   const result = await db.execute<{ current_count: number }>(sql`
     with d as (
@@ -205,10 +191,7 @@ export async function getUserTags(userId: number): Promise<Tag[]> {
     .where(eq(userTags.userId, userId))) as Tag[];
 }
 
-/**
- * Sets (or clears, with null) the user's tag of one kind. The label is canonicalised:
- * if anyone already holds this kind+key, their spelling is reused, so variants never fork a tag.
- */
+/** Sets (null clears) the user's tag of one kind, reusing an existing spelling so variants never fork a tag. */
 export async function setUserTag(userId: number, kind: TagKind, label: string | null): Promise<void> {
   if (label === null) {
     await db.delete(userTags).where(and(eq(userTags.userId, userId), eq(userTags.kind, kind)));
@@ -238,4 +221,23 @@ export async function listSubscriberIds(category: Category, excludeId: number, a
       ))),
     ));
   return rows.map((r) => r.userId);
+}
+
+/** Groups `creatorId` leads that are still live (for the spam cap). */
+export async function countActiveGroups(creatorId: number): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(groups)
+    .where(and(eq(groups.creatorId, creatorId), notCancelled, gt(groups.expiresAt, sql`now()`)));
+  return row?.n ?? 0;
+}
+
+export async function muteCategory(userId: number, category: Category): Promise<void> {
+  await db.insert(mutedCategories).values({ userId, category }).onConflictDoNothing();
+}
+
+/** Deletes groups expired over RETENTION_DAYS ago (members and audience cascade). Returns how many. */
+export async function deleteOldGroups(): Promise<number> {
+  const rows = await db.delete(groups)
+    .where(lt(groups.expiresAt, sql`now() - make_interval(days => ${RETENTION_DAYS})`))
+    .returning({ id: groups.id });
+  return rows.length;
 }

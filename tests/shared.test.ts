@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { statusOf, tagKey, validateTag, validateDescription, validateTitle, EXPIRY_PRESETS, EXPIRY_MIN, EXPIRY_MAX, CATEGORIES } from './rules.ts';
-import { formatTimeLeft, splitLinks } from './format.ts';
+import { statusOf, tagKey, validateTag, validateDescription, validateTitle, EXPIRY_PRESETS, EXPIRY_MIN, EXPIRY_MAX, CATEGORIES } from '../shared/rules.ts';
+import { formatTimeLeft, splitLinks } from '../shared/format.ts';
 
 const now = Date.parse('2026-01-01T00:00:00Z');
 const later = new Date(now + 60_000).toISOString();

@@ -16,11 +16,7 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 const TOAST_DURATION_MS = 4000;
 
-/**
- * Provides `showError` for surfacing errors as dismissible toasts, and
- * installs global `error`/`unhandledrejection` listeners so unhandled
- * errors are visible in production, where there is no browser console.
- */
+/** Error toasts, plus global error/unhandledrejection listeners (no console in Telegram). */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);
@@ -91,10 +87,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Returns `{ showError }` for reporting errors as toasts. Must be used
- * within a `ToastProvider`.
- */
+/** `{ showError }`; must be inside ToastProvider. */
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) {
