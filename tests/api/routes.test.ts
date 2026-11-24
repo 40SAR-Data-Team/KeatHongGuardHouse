@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test, type Mock } from 'bun:test';
 import { LEADER, MEMBER, OTHER, call, db, flush, group, reset, sent } from './helpers.ts';
 import type { GroupDetail } from '../../shared/rules.ts';
 
@@ -59,6 +59,16 @@ describe('/api/groups', () => {
     expect(res.statusCode).toBe(200);
     expect(db.insertGroup).toHaveBeenCalledTimes(1);
     expect(sent.map((m) => m.chat_id)).toEqual([OTHER.id]);
+  });
+  test('POST still succeeds when the DM blast fails', async () => {
+    serve(group());
+    const warn = spyOn(console, 'warn').mockImplementation(() => {});
+    db.listSubscriberIds.mockImplementationOnce(async () => { throw new Error('db down'); });
+    const res = await call(groupsRoute, { method: 'POST', body: create });
+    await flush();
+    expect(warn).toHaveBeenCalledWith('[telegram] new-group DMs failed', expect.any(Error));
+    warn.mockRestore();
+    expect(res.statusCode).toBe(200);
   });
   test('POST private group sends no blast', async () => {
     serve(group({ visibility: 'private' }));
@@ -230,6 +240,50 @@ describe('bot mute button', async () => {
     await onMute(c);
     expect(db.muteCategory).not.toHaveBeenCalled();
     expect(c.answers).toEqual(['Unknown category']);
+  });
+});
+
+describe('bot webhook commands', async () => {
+  const webhook = (await import('../../api/bot.ts')).default;
+  let updateId = 0;
+  /** Posts a /new message through the real webhook; Telegram's API is stubbed (getMe ok, sendMessage `sendOk`). */
+  async function command(chatType: string, sendOk = true) {
+    const replies: { text: string; reply_markup: { inline_keyboard: { web_app: { url: string } }[][] } }[] = [];
+    // grammY holds the helpers' fetch mock, so swap its implementation rather than globalThis.fetch.
+    const fetchMock = globalThis.fetch as unknown as Mock<(url: string, init?: RequestInit) => Promise<Response>>;
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).endsWith('/getMe')) {
+        return Response.json({ ok: true, result: { id: 9, is_bot: true, first_name: 'Bot', username: 'test_bot' } });
+      }
+      replies.push(JSON.parse(String(init?.body)));
+      return Response.json(sendOk ? { ok: true, result: {} } : { ok: false, error_code: 400, description: 'Bad Request' });
+    });
+    const update = {
+      update_id: ++updateId,
+      message: {
+        message_id: 1, date: 0, text: '/new', entities: [{ type: 'bot_command', offset: 0, length: 4 }],
+        chat: { id: MEMBER.id, type: chatType }, from: { id: MEMBER.id, is_bot: false, first_name: 'Max' },
+      },
+    };
+    const res = { status: () => res, json: () => res, send: () => res, end: () => res };
+    await webhook({ body: update, headers: { 'x-telegram-bot-api-secret-token': 'webhook-secret' } } as never, res as never);
+    fetchMock.mockImplementation(original);
+    return replies;
+  }
+
+  test('replies with a web_app button to that tab in private chats', async () => {
+    const [reply] = await command('private');
+    expect(reply!.reply_markup.inline_keyboard[0]![0]!.web_app.url).toBe('https://example.test/?tab=create');
+  });
+  test('stays silent in group chats', async () => {
+    expect(await command('group')).toEqual([]);
+  });
+  test('logs a failed reply instead of throwing', async () => {
+    const err = spyOn(console, 'error').mockImplementation(() => {});
+    await command('private', false);
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('failed'), expect.anything());
+    err.mockRestore();
   });
 });
 
