@@ -49,6 +49,8 @@ globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit)
   sent.push(JSON.parse(String(init?.body)));
   return new Response('{"ok":true}', { status: 200 });
 }) as unknown as typeof fetch;
+// grammY calls Telegram via node-fetch; route it through the stub above so tests never hit the network.
+void mock.module('node-fetch', () => ({ default: (url: string, init?: RequestInit) => globalThis.fetch(url, init) }));
 
 export function reset(): void {
   for (const fn of Object.values(db)) fn.mockClear();

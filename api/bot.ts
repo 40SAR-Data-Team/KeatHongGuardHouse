@@ -17,6 +17,16 @@ if (!secretToken) throw new Error('TELEGRAM_WEBHOOK_SECRET is unset');
 
 const bot = new Bot(token); // botInfo fetched lazily (one getMe per cold start) so it never goes stale.
 
+// Required: an uncaught error becomes a 500 and Telegram retries the update, sending duplicate DMs.
+// Not bot.catch: that only runs under long polling; webhookCallback rethrows. Registered first so it wraps every handler.
+bot.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (err) {
+    console.error(`[bot] update ${ctx.update.update_id} failed:`, err);
+  }
+});
+
 for (const { command } of BOT_COMMANDS) {
   const { text, button, tab } = COMMAND_REPLIES[command];
   const url = tab ? `${webAppUrl}/?tab=${tab}` : webAppUrl;
@@ -35,9 +45,6 @@ export async function onMute(ctx: { match: RegExpMatchArray | string; from: { id
   await ctx.answerCallbackQuery(`Muted ${categoryOf(category).label} alerts. Turn back on in Settings.`);
 }
 bot.callbackQuery(/^mute:(\w+)$/, onMute);
-
-// Required: an uncaught error becomes a 500 and Telegram retries the update, sending duplicate DMs.
-bot.catch((err) => console.error(`[bot] update ${err.ctx.update.update_id} failed:`, err.error));
 
 // 'next-js' adapter: Vercel already parsed req.body, which this adapter reads directly.
 export default webhookCallback(bot, 'next-js', { secretToken, onTimeout: 'return', timeoutMilliseconds: 8_000 });
